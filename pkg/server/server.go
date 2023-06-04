@@ -4,74 +4,64 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log"
 	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/gofiber/fiber/v2"
 )
 
 type Server struct {
+	uiFS fs.FS
 }
 
-var uiFS fs.FS
+func NewServer(ui fs.FS) *Server {
+	return &Server{
+		uiFS: ui,
+	}
+}
 
-func InitServer(ui fs.FS, port string) error {
-	uiFS = ui
+func (s *Server) StartServer(port string) error {
+	app := fiber.New()
+	app.Get("/", s.handleStatic)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/health", handleHealth)
-	mux.HandleFunc("/api", handleApi)
-	mux.HandleFunc("/", handleStatic)
-	if err := http.ListenAndServe(port, mux); err != nil {
+	if err := app.Listen(port); err != nil {
 		return err
 	}
 	return nil
 }
 
-func handleHealth(w http.ResponseWriter, r *http.Request) {
-	// TODO: implement
-}
-
-func handleApi(w http.ResponseWriter, r *http.Request) {
-	// TODO: implement
-}
-
-func handleStatic(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
+func (s *Server) handleStatic(c *fiber.Ctx) error {
+	if c.Method() != http.MethodGet {
+		return c.SendStatus(http.StatusMethodNotAllowed)
 	}
 
-	path := filepath.Clean(r.URL.Path)
+	path := c.Path()
 	if path == "/" { // Add other paths that you route on the UI side here
 		path = "index.html"
 	}
 	path = strings.TrimPrefix(path, "/")
 
-	file, err := uiFS.Open(path)
+	file, err := s.uiFS.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Println("file", path, "not found:", err)
-			http.NotFound(w, r)
-			return
+			return c.SendStatus(fiber.StatusNotFound)
 		}
-		log.Println("file", path, "cannot be read:", err)
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
+		return c.SendStatus(fiber.StatusInternalServerError)
 	}
 
 	contentType := mime.TypeByExtension(filepath.Ext(path))
-	w.Header().Set("Content-Type", contentType)
+	c.Set("Content-Type", contentType)
 	if strings.HasPrefix(path, "static/") {
-		w.Header().Set("Cache-Control", "public, max-age=31536000")
+		c.Set("Cache-Control", "public, max-age=31536000")
 	}
 	stat, err := file.Stat()
 	if err == nil && stat.Size() > 0 {
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", stat.Size()))
+		c.Set("Content-Length", fmt.Sprintf("%d", stat.Size()))
 	}
 
-	n, _ := io.Copy(w, file)
-	log.Println("file", path, "copied", n, "bytes")
+	_, err = io.Copy(c.Response().BodyWriter(), file)
+	return err
 }

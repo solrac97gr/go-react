@@ -19,7 +19,9 @@ func init() {
 }
 
 func main() {
-	if err := server.InitServer(uiFS, ":8080"); err != nil {
+	server := server.NewServer(uiFS)
+
+	if err := server.StartServer(":8080"); err != nil {
 		log.Fatal(err)
 	}
 }
