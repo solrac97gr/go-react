@@ -1,0 +1,1 @@
+cd _ui && npm run build && cd .. && cd cmd/http && go build -o ../../bin/app

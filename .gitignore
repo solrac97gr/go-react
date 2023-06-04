@@ -1,0 +1,4 @@
+# Ignore Binary files
+/bin/
+# Ignore UI Builded
+/_ui/build

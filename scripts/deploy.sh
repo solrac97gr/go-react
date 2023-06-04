@@ -1,0 +1,1 @@
+./scripts/build.sh && clear && ./scripts/run-bin.sh
